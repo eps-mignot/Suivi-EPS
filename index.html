@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14213d">
+<title>Carnet EPS</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="app-bar">
+  <div class="app-bar__brand">
+    <span class="app-bar__whistle" aria-hidden="true"></span>
+    <span class="app-bar__title">Carnet EPS</span>
+  </div>
+  <nav class="tabbar" role="tablist" aria-label="Navigation principale">
+    <button type="button" class="tabbar__btn is-active" id="nav-seance" role="tab" aria-selected="true">
+      <span class="tabbar__num">1</span> Séance
+    </button>
+    <button type="button" class="tabbar__btn" id="nav-bilans" role="tab" aria-selected="false">
+      <span class="tabbar__num">2</span> Bilans &amp; historique
+    </button>
+  </nav>
+  <div class="app-bar__status" id="offline-pill">Hors-ligne prêt</div>
+</header>
+
+<main id="app">
+
+<!-- ============================================================ -->
+<!-- ECRAN 1 : SEANCE COMPLETE                                     -->
+<!-- ============================================================ -->
+<section id="ecran-seance" class="screen is-visible">
+
+  <div class="board">
+    <div class="board__row">
+      <div class="field">
+        <label for="sel-classe">Classe</label>
+        <select id="sel-classe">
+          <option value="">— Choisir une classe —</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="sel-apsa">APSA</label>
+        <select id="sel-apsa">
+          <option value="">— Choisir une APSA —</option>
+        </select>
+      </div>
+      <div class="field field--date">
+        <label for="inp-date">Date</label>
+        <input type="date" id="inp-date">
+      </div>
+    </div>
+    <div class="board__manage">
+      <button type="button" class="btn btn--ghost btn--sm" id="btn-manage-classes">🛠 Gérer les classes / élèves (CSV)</button>
+      <button type="button" class="btn btn--ghost btn--sm" id="btn-manage-apsa">🛠 Gérer les APSA</button>
+      <button type="button" class="btn btn--ghost btn--sm" id="btn-export-all">💾 Exporter toutes les données</button>
+      <label class="btn btn--ghost btn--sm btn--file">
+        📥 Importer une sauvegarde (fusion)
+        <input type="file" id="import-all-input" accept=".json,application/json">
+      </label>
+    </div>
+  </div>
+
+  <div id="seance-body" class="seance-body hidden">
+
+    <!-- Liste des eleves -->
+    <section class="card">
+      <h2 class="card__title">Élèves <span class="card__count" id="eleves-count"></span></h2>
+      <div class="eleves-legend">
+        <span class="pill pill--present pill--mini">Présent</span>
+        <span class="pill pill--absent pill--mini">Absent</span>
+        <span class="pill pill--dispense pill--mini">Dispensé présent</span>
+      </div>
+      <ul class="eleves-list" id="eleves-list"></ul>
+    </section>
+
+    <!-- Zone libre -->
+    <section class="card">
+      <h2 class="card__title">Contenu réel de la séance</h2>
+      <textarea id="zone-libre" rows="6" placeholder="Ce qui a réellement été fait pendant la séance : échauffement, situations, consignes, régulations..."></textarea>
+    </section>
+
+    <!-- Criteres globaux -->
+    <section class="card">
+      <h2 class="card__title">Critères globaux</h2>
+      <div class="board__row">
+        <div class="field">
+          <label for="sel-engagement">Engagement global</label>
+          <select id="sel-engagement">
+            <option value="faible">Faible</option>
+            <option value="moyen" selected>Moyen</option>
+            <option value="bon">Bon</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="sel-comportement">Comportement global</label>
+          <select id="sel-comportement">
+            <option value="ras">RAS</option>
+            <option value="moyen" selected>Moyen</option>
+            <option value="difficile">Difficile</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="sel-objectif">Objectif atteint</label>
+          <select id="sel-objectif">
+            <option value="oui">Oui</option>
+            <option value="partiel" selected>Partiel</option>
+            <option value="non">Non</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <!-- Evenements individuels -->
+    <section class="card">
+      <h2 class="card__title">Événements individuels</h2>
+      <ul class="evt-list" id="evt-list"></ul>
+      <button type="button" class="btn btn--ghost" id="btn-add-evt">+ Ajouter événement élève</button>
+    </section>
+
+    <!-- Carnet d'entrainement -->
+    <section class="card">
+      <h2 class="card__title">Carnet d'entraînement élève</h2>
+      <div class="field">
+        <label for="sel-carnet-eleve">Élève</label>
+        <select id="sel-carnet-eleve"></select>
+      </div>
+      <textarea id="carnet-texte" rows="3" placeholder="Évaluation du carnet d'entraînement pour l'élève sélectionné..."></textarea>
+    </section>
+
+    <div class="actions-bar">
+      <button type="button" class="btn btn--primary btn--lg" id="btn-save">Enregistrer la séance</button>
+      <button type="button" class="btn btn--secondary btn--lg" id="btn-goto-bilans">Aller aux bilans / historique</button>
+    </div>
+    <p class="save-flash" id="save-flash"></p>
+  </div>
+
+</section>
+
+<!-- ============================================================ -->
+<!-- ECRAN 2 : BILANS & HISTORIQUE                                 -->
+<!-- ============================================================ -->
+<section id="ecran-bilans" class="screen">
+
+  <div class="board">
+    <div class="board__row">
+      <div class="field">
+        <label for="f-classe">Classe</label>
+        <select id="f-classe"><option value="">Toutes</option></select>
+      </div>
+      <div class="field">
+        <label for="f-apsa">APSA</label>
+        <select id="f-apsa"><option value="">Toutes</option></select>
+      </div>
+      <div class="field">
+        <label for="f-eleve">Élève</label>
+        <select id="f-eleve"><option value="">Tous</option></select>
+      </div>
+      <div class="field field--date">
+        <label for="f-date-debut">Du</label>
+        <input type="date" id="f-date-debut">
+      </div>
+      <div class="field field--date">
+        <label for="f-date-fin">Au</label>
+        <input type="date" id="f-date-fin">
+      </div>
+    </div>
+  </div>
+
+  <nav class="subtabs" role="tablist" aria-label="Type de bilan">
+    <button type="button" class="subtabs__btn is-active" data-panel="panel-historique">Historique</button>
+    <button type="button" class="subtabs__btn" data-panel="panel-individuel">Bilan individuel</button>
+    <button type="button" class="subtabs__btn" data-panel="panel-classe">Bilan de classe</button>
+    <button type="button" class="subtabs__btn" data-panel="panel-projet">Projet de classe</button>
+  </nav>
+
+  <section class="panel is-visible" id="panel-historique">
+    <div id="historique-list" class="historique-list"></div>
+  </section>
+
+  <section class="panel" id="panel-individuel">
+    <div class="bilan-box" id="bilan-individuel-box">
+      <p class="empty-hint">Choisissez un élève dans les filtres ci-dessus pour générer son bilan.</p>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-classe">
+    <div class="bilan-box" id="bilan-classe-box">
+      <p class="empty-hint">Choisissez une classe dans les filtres ci-dessus pour générer le bilan de classe.</p>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-projet">
+    <div class="bilan-box" id="bilan-projet-box">
+      <p class="empty-hint">Choisissez une classe dans les filtres ci-dessus pour générer le projet de classe.</p>
+    </div>
+  </section>
+
+</section>
+
+</main>
+
+<!-- Modal gestion classes / eleves -->
+<div class="modal-backdrop" id="modal-classes-backdrop">
+  <div class="modal modal--wide" role="dialog" aria-modal="true" aria-labelledby="modal-classes-title">
+    <h3 id="modal-classes-title">Gérer les classes et les élèves</h3>
+
+    <div class="classes-io">
+      <label class="btn btn--ghost btn--file">
+        Importer un CSV
+        <input type="file" id="csv-import-input" accept=".csv,text/csv">
+      </label>
+      <button type="button" class="btn btn--ghost" id="btn-csv-export">Exporter en CSV</button>
+    </div>
+    <p class="csv-hint">Format attendu : deux colonnes <code>classe,eleve</code> (le séparateur <code>;</code> est aussi accepté), une ligne par élève, avec ou sans ligne d'en-tête. L'import <strong>ajoute</strong> les classes/élèves sans supprimer ceux déjà présents.</p>
+
+    <div id="classes-admin-list" class="classes-admin-list"></div>
+
+    <button type="button" class="btn btn--ghost" id="btn-add-classe">+ Ajouter une classe</button>
+
+    <div class="modal__actions">
+      <button type="button" class="btn btn--primary" id="btn-classes-done">Terminé</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal gestion APSA -->
+<div class="modal-backdrop" id="modal-apsa-backdrop">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-apsa-title">
+    <h3 id="modal-apsa-title">Gérer les APSA</h3>
+    <ul class="eleve-admin-list" id="apsa-admin-list"></ul>
+    <button type="button" class="btn btn--ghost" id="btn-add-apsa">+ Ajouter une APSA</button>
+    <div class="modal__actions">
+      <button type="button" class="btn btn--primary" id="btn-apsa-done">Terminé</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal ajout evenement -->
+<div class="modal-backdrop" id="modal-evt-backdrop">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-evt-title">
+    <h3 id="modal-evt-title">Ajouter un événement</h3>
+    <div class="field">
+      <label for="evt-eleve">Élève</label>
+      <select id="evt-eleve"></select>
+    </div>
+    <div class="field">
+      <label for="evt-type">Type</label>
+      <select id="evt-type">
+        <option value="progres">Progrès</option>
+        <option value="difficulte">Difficulté</option>
+        <option value="comportement_positif">Comportement positif</option>
+        <option value="comportement_negatif">Comportement négatif</option>
+        <option value="implication_sociale">Implication sociale notable</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="evt-detail">Détail</label>
+      <textarea id="evt-detail" rows="2" placeholder="Ex : Bonne gestion de l'allure"></textarea>
+    </div>
+    <div class="modal__actions">
+      <button type="button" class="btn btn--ghost" id="btn-evt-cancel">Annuler</button>
+      <button type="button" class="btn btn--primary" id="btn-evt-confirm">Ajouter</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal detail seance (historique) -->
+<div class="modal-backdrop" id="modal-seance-backdrop">
+  <div class="modal modal--wide" role="dialog" aria-modal="true" aria-labelledby="modal-seance-title">
+    <h3 id="modal-seance-title">Détail de la séance</h3>
+    <div id="modal-seance-content" class="modal-seance-content"></div>
+    <div class="modal__actions">
+      <button type="button" class="btn btn--danger" id="btn-seance-delete">Supprimer</button>
+      <button type="button" class="btn btn--secondary" id="btn-seance-pdf">Exporter en PDF</button>
+      <button type="button" class="btn btn--ghost" id="btn-seance-close">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
