@@ -44,7 +44,7 @@ const PRESENCE_LABELS = { present: "Présent", absent: "Absent", dispense: "Disp
 /* 2. STOCKAGE LOCAL                                                    */
 /* ------------------------------------------------------------------ */
 const LS_SEANCES = "eps_seances";
-const LS_CARNET  = "eps_carnet";   // { "Nom": "texte" }
+const LS_CARNET  = "eps_carnet";   // { "classe||apsa||Nom": "texte" } — 1 entrée par cycle
 const LS_CLASSES = "eps_classes";  // { "6A": ["Nom1", "Nom2", ...], ... }
 const LS_APSA    = "eps_apsa";     // ["Demi-fond", "Handball", ...]
 
@@ -97,6 +97,12 @@ function loadCarnet(){
 }
 function saveCarnet(obj){
   localStorage.setItem(LS_CARNET, JSON.stringify(obj));
+}
+/* Le carnet est évalué par cycle : une entrée distincte par élève, pour
+   chaque combinaison classe + APSA. Ainsi un cycle Handball et un cycle
+   Natation pour le même élève ne s'écrasent jamais l'un l'autre. */
+function carnetKey(classe, apsa, eleve){
+  return `${classe}||${apsa}||${eleve}`;
 }
 
 function uid(){
@@ -683,15 +689,17 @@ function renderCarnetSelect(){
   const sel = document.getElementById("sel-carnet-eleve");
   sel.innerHTML = "";
   (CLASSES[current.classe] || []).forEach(n => sel.appendChild(new Option(n, n)));
-  const carnet = loadCarnet();
   const fillTextarea = () => {
-    document.getElementById("carnet-texte").value = carnet[sel.value] || "";
+    const carnet = loadCarnet();
+    const key = carnetKey(current.classe, current.apsa, sel.value);
+    document.getElementById("carnet-texte").value = carnet[key] || "";
   };
   fillTextarea();
   sel.onchange = fillTextarea;
   document.getElementById("carnet-texte").oninput = () => {
     const c = loadCarnet();
-    c[sel.value] = document.getElementById("carnet-texte").value;
+    const key = carnetKey(current.classe, current.apsa, sel.value);
+    c[key] = document.getElementById("carnet-texte").value;
     saveCarnet(c);
   };
 }
@@ -933,7 +941,14 @@ function renderBilanIndividuel(){
   const engagementScore = scoreFromList(seances.map(s => s.engagement), {faible:0, moyen:1, bon:2});
   const comportementScore = scoreFromList(seances.map(s => s.comportement), {ras:2, moyen:1, difficile:0});
 
-  const carnet = loadCarnet()[eleve];
+  const carnetData = loadCarnet();
+  const cyclesRencontres = [...new Set(seances.map(s => `${s.classe}||${s.apsa}`))];
+  const carnetEntries = cyclesRencontres
+    .map(key => {
+      const [classe, apsa] = key.split("||");
+      return { classe, apsa, texte: carnetData[carnetKey(classe, apsa, eleve)] };
+    })
+    .filter(c => c.texte && c.texte.trim());
 
   let txtAssiduite = `${eleve} a été présent(e) à ${present} séance(s) sur ${total} (${pct(present,total)}%), absent(e) à ${absent} séance(s)`+
     (dispense ? `, et dispensé(e) présent(e) à ${dispense} séance(s)` : "") + ".";
@@ -962,9 +977,9 @@ function renderBilanIndividuel(){
     ? `L'élève s'est montré(e) impliqué(e) socialement à ${implication} reprise(s) lors de dispenses, et ${implicNotable} événement(s) d'implication sociale notable ont été relevés (arbitrage, aide, organisation...).`
     : `Aucune implication sociale particulière n'a été relevée sur la période (arbitrage, aide aux pairs, organisation...).`;
 
-  let txtCarnet = carnet && carnet.trim()
-    ? `Carnet d'entraînement : ${carnet.trim()}`
-    : `Aucune évaluation du carnet d'entraînement n'a été saisie pour cet élève.`;
+  let txtCarnet = carnetEntries.length
+    ? carnetEntries.map(c => `<strong>${escapeHtml(c.apsa)}</strong> (${escapeHtml(c.classe)}) : ${escapeHtml(c.texte.trim())}`).join("<br>")
+    : `Aucune évaluation du carnet d'entraînement n'a été saisie pour cet élève sur cette période.`;
 
   let txtEvtsDetail = evts.length
     ? evts.map(e => `• ${frDate(e.date)} — ${EVT_LABELS[e.type]} : ${e.detail || "—"}`).join("<br>")
@@ -983,6 +998,7 @@ function renderBilanIndividuel(){
     <p>${txtImplication}</p>
     <p>${txtProgression}</p>
     <p>${txtAttitude}</p>
+    <h3>Carnet d'entraînement</h3>
     <p>${txtCarnet}</p>
     <h3>Détail des événements</h3>
     <p>${txtEvtsDetail}</p>
