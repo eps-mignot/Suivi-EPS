@@ -115,13 +115,6 @@
       </div>
     </section>
 
-    <!-- Evenements individuels -->
-    <section class="card">
-      <h2 class="card__title">Événements individuels</h2>
-      <ul class="evt-list" id="evt-list"></ul>
-      <button type="button" class="btn btn--ghost" id="btn-add-evt">+ Ajouter événement élève</button>
-    </section>
-
     <!-- Carnet d'entrainement -->
     <section class="card">
       <h2 class="card__title">Carnet d'entraînement élève <span class="card__count">(par cycle : classe + APSA en cours)</span></h2>
@@ -236,35 +229,6 @@
     <button type="button" class="btn btn--ghost" id="btn-add-apsa">+ Ajouter une APSA</button>
     <div class="modal__actions">
       <button type="button" class="btn btn--primary" id="btn-apsa-done">Terminé</button>
-    </div>
-  </div>
-</div>
-
-<!-- Modal ajout evenement -->
-<div class="modal-backdrop" id="modal-evt-backdrop">
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-evt-title">
-    <h3 id="modal-evt-title">Ajouter un événement</h3>
-    <div class="field">
-      <label for="evt-eleve">Élève</label>
-      <select id="evt-eleve"></select>
-    </div>
-    <div class="field">
-      <label for="evt-type">Type</label>
-      <select id="evt-type">
-        <option value="progres">Progrès</option>
-        <option value="difficulte">Difficulté</option>
-        <option value="comportement_positif">Comportement positif</option>
-        <option value="comportement_negatif">Comportement négatif</option>
-        <option value="implication_sociale">Implication sociale notable</option>
-      </select>
-    </div>
-    <div class="field">
-      <label for="evt-detail">Détail</label>
-      <textarea id="evt-detail" rows="2" placeholder="Ex : Bonne gestion de l'allure"></textarea>
-    </div>
-    <div class="modal__actions">
-      <button type="button" class="btn btn--ghost" id="btn-evt-cancel">Annuler</button>
-      <button type="button" class="btn btn--primary" id="btn-evt-confirm">Ajouter</button>
     </div>
   </div>
 </div>
