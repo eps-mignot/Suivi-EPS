@@ -181,12 +181,12 @@ textarea{ resize: vertical; line-height:1.45; }
 .eleves-legend{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
 .eleves-list{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px; }
 .eleve-row{
-  display:flex; align-items:center; gap:10px;
-  flex-wrap:wrap;
+  display:flex; flex-direction:column; gap:8px;
   border: 1px solid var(--line);
   border-radius: var(--radius-m);
   padding: 10px 12px;
 }
+.eleve-row__top{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
 .eleve-row__name{ font-weight:700; flex: 1 1 130px; }
 .pill-group{ display:flex; gap:6px; flex-wrap:wrap; }
 .pill{
@@ -205,24 +205,26 @@ textarea{ resize: vertical; line-height:1.45; }
 }
 .eleve-row__social input{ width:auto; }
 
-/* ---------------------------------------------------------------- Evenements */
-.evt-list{ list-style:none; margin:0 0 12px; padding:0; display:flex; flex-direction:column; gap:8px; }
-.evt-item{
-  border:1px solid var(--line); border-radius: var(--radius-m);
-  padding:10px 12px; display:flex; justify-content:space-between; gap:10px; align-items:flex-start;
+/* -- Évaluation rapide (Travail / Attitude en 1 tap + remarque libre) -- */
+.eleve-row__eval{
+  display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+  padding-top:8px; border-top:1px dashed var(--line);
 }
-.evt-item__text b{ color: var(--ink); }
-.evt-item__tag{
-  display:inline-block; font-size:.68rem; font-weight:800; text-transform:uppercase;
-  padding: 3px 8px; border-radius: 999px; margin-right:6px; letter-spacing:.03em;
+.eval-group{ display:flex; align-items:center; gap:6px; }
+.eval-group__label{ font-size:.74rem; font-weight:700; color: var(--text-soft); text-transform:uppercase; letter-spacing:.03em; }
+.eval-btn{
+  appearance:none; cursor:pointer; border-radius: 999px;
+  border: 2px solid var(--line); background: var(--surface);
+  font-size:1rem; line-height:1; padding: 6px 10px;
+  filter: grayscale(1) opacity(.55);
 }
-.tag-progres{ background:#e3f7ea; color:var(--present); }
-.tag-difficulte{ background:#fce6e8; color:var(--absent); }
-.tag-comportement_positif{ background:#e3f0fc; color:#1d5fb8; }
-.tag-comportement_negatif{ background:#fdeadd; color:#b3540e; }
-.tag-implication_sociale{ background:#fdf1d6; color:var(--dispense); }
-.evt-item__del{
-  background:none; border:none; color: var(--absent); font-weight:800; cursor:pointer; font-size:1.1rem; line-height:1;
+.eval-btn.is-active{ filter:none; }
+.eval-btn--positif.is-active{ background: var(--present-bg); border-color: var(--present); }
+.eval-btn--negatif.is-active{ background: var(--absent-bg); border-color: var(--absent); }
+.remarque-input{
+  flex: 1 1 160px; min-width: 140px;
+  border: 2px solid var(--line); border-radius: var(--radius-s);
+  padding: 8px 10px; font-size: .88rem;
 }
 
 /* ---------------------------------------------------------------- Subtabs (ecran 2) */
@@ -271,7 +273,7 @@ textarea{ resize: vertical; line-height:1.45; }
 .stat__label{ font-size:.72rem; color: var(--text-soft); text-transform:uppercase; letter-spacing:.03em; }
 
 /* ---------------------------------------------------------------- Gestion classes/eleves */
-.board__manage{ margin-top: 10px; text-align: right; }
+.board__manage{ margin-top: 10px; display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
 .btn--sm{ padding: 8px 14px; font-size: .82rem; }
 .btn--file{ position: relative; display:inline-block; overflow:hidden; cursor:pointer; }
 .btn--file input[type="file"]{
