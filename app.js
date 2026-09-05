@@ -30,14 +30,6 @@ const DEFAULT_APSA = [
   "Danse", "Escalade", "Natation", "Athlétisme", "Acrosport", "Musculation"
 ];
 
-const EVT_LABELS = {
-  progres: "Progrès",
-  difficulte: "Difficulté",
-  comportement_positif: "Comportement positif",
-  comportement_negatif: "Comportement négatif",
-  implication_sociale: "Implication sociale notable"
-};
-
 const PRESENCE_LABELS = { present: "Présent", absent: "Absent", dispense: "Dispensé présent" };
 
 /* ------------------------------------------------------------------ */
@@ -139,7 +131,11 @@ function newCurrent(classe, apsa){
     engagement: "moyen",
     comportement: "moyen",
     objectif: "partiel",
-    evenements: []
+    // Évaluation rapide par élève, en 1 tap : "positif" | "negatif" | absent = neutre.
+    travail: {},
+    attitude: {},
+    // Petit mot libre optionnel par élève pour cette séance.
+    remarques: {}
   };
 }
 
@@ -626,7 +622,6 @@ function onClasseOrApsaChange(){
   body.classList.remove("hidden");
   renderEleves();
   renderCarnetSelect();
-  renderEvtList();
   document.getElementById("zone-libre").value = "";
   document.getElementById("save-flash").textContent = "";
 }
@@ -647,6 +642,10 @@ function renderEleves(){
     li.className = "eleve-row";
     const etat = current.presence[nom] || "present";
 
+    // -- ligne du haut : nom + présence --
+    const top = document.createElement("div");
+    top.className = "eleve-row__top";
+
     const nameSpan = document.createElement("span");
     nameSpan.className = "eleve-row__name";
     nameSpan.textContent = nom;
@@ -666,8 +665,31 @@ function renderEleves(){
       pillGroup.appendChild(b);
     });
 
-    li.appendChild(nameSpan);
-    li.appendChild(pillGroup);
+    top.appendChild(nameSpan);
+    top.appendChild(pillGroup);
+    li.appendChild(top);
+
+    // -- ligne d'évaluation rapide : Travail / Attitude / Remarque -- 
+    // Masquée pour les absents (rien à évaluer).
+    if(etat !== "absent"){
+      const evalRow = document.createElement("div");
+      evalRow.className = "eleve-row__eval";
+      evalRow.appendChild(buildEvalGroup(nom, "travail", "Travail"));
+      evalRow.appendChild(buildEvalGroup(nom, "attitude", "Attitude"));
+
+      const remarqueInput = document.createElement("input");
+      remarqueInput.type = "text";
+      remarqueInput.className = "remarque-input";
+      remarqueInput.placeholder = "Remarque (optionnel)";
+      remarqueInput.value = current.remarques[nom] || "";
+      remarqueInput.setAttribute("aria-label", `Remarque pour ${nom}`);
+      remarqueInput.addEventListener("input", () => {
+        current.remarques[nom] = remarqueInput.value;
+      });
+      evalRow.appendChild(remarqueInput);
+
+      li.appendChild(evalRow);
+    }
 
     if(etat === "dispense"){
       const wrap = document.createElement("label");
@@ -685,6 +707,40 @@ function renderEleves(){
   });
 }
 
+/* Construit un petit groupe "Label : 👍 👎" pour un axe (travail/attitude).
+   1 tap = actif (surbrillance) ; re-tap = retour au neutre (aucune trace). */
+function buildEvalGroup(nom, axis, label){
+  const group = document.createElement("div");
+  group.className = "eval-group";
+
+  const labelSpan = document.createElement("span");
+  labelSpan.className = "eval-group__label";
+  labelSpan.textContent = label;
+  group.appendChild(labelSpan);
+
+  ["positif", "negatif"].forEach(val => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.dataset.val = val;
+    btn.className = `eval-btn eval-btn--${val}` + (current[axis][nom] === val ? " is-active" : "");
+    btn.textContent = val === "positif" ? "👍" : "👎";
+    btn.setAttribute("aria-label", `${label} ${val === "positif" ? "positif" : "à travailler"} pour ${nom}`);
+    btn.addEventListener("click", () => {
+      if(current[axis][nom] === val){
+        delete current[axis][nom]; // re-tap : retour au neutre
+      } else {
+        current[axis][nom] = val;
+      }
+      group.querySelectorAll(".eval-btn").forEach(b => {
+        b.classList.toggle("is-active", b.dataset.val === current[axis][nom]);
+      });
+    });
+    group.appendChild(btn);
+  });
+
+  return group;
+}
+
 function renderCarnetSelect(){
   const sel = document.getElementById("sel-carnet-eleve");
   sel.innerHTML = "";
@@ -692,7 +748,11 @@ function renderCarnetSelect(){
   const fillTextarea = () => {
     const carnet = loadCarnet();
     const key = carnetKey(current.classe, current.apsa, sel.value);
-    document.getElementById("carnet-texte").value = carnet[key] || "";
+    // Repli : si rien n'existe encore pour ce cycle précis, on affiche
+    // l'ancienne saisie "1 texte par élève" (versions antérieures de l'app),
+    // pour ne rien perdre lors d'une réimportation d'une ancienne sauvegarde.
+    const valeur = carnet[key] !== undefined ? carnet[key] : (carnet[sel.value] || "");
+    document.getElementById("carnet-texte").value = valeur;
   };
   fillTextarea();
   sel.onchange = fillTextarea;
@@ -704,63 +764,27 @@ function renderCarnetSelect(){
   };
 }
 
-/* --- Evenements individuels --- */
-function renderEvtList(){
-  const ul = document.getElementById("evt-list");
-  ul.innerHTML = "";
-  if(current.evenements.length === 0){
-    const li = document.createElement("li");
-    li.className = "empty-hint";
-    li.textContent = "Aucun événement pour cette séance.";
-    ul.appendChild(li);
-    return;
-  }
-  current.evenements.forEach((evt, idx) => {
-    const li = document.createElement("li");
-    li.className = "evt-item";
-    const text = document.createElement("div");
-    text.className = "evt-item__text";
-    text.innerHTML = `<span class="evt-item__tag tag-${evt.type}">${EVT_LABELS[evt.type]}</span><b>${escapeHtml(evt.eleve)}</b> — ${escapeHtml(evt.detail || "")}`;
-    const del = document.createElement("button");
-    del.className = "evt-item__del";
-    del.type = "button";
-    del.innerHTML = "✕";
-    del.title = "Supprimer";
-    del.addEventListener("click", () => {
-      current.evenements.splice(idx, 1);
-      renderEvtList();
-    });
-    li.appendChild(text);
-    li.appendChild(del);
-    ul.appendChild(li);
-  });
-}
-
 function escapeHtml(s){
   return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
 
-/* --- Modal ajout evenement --- */
-const modalEvt = document.getElementById("modal-evt-backdrop");
-document.getElementById("btn-add-evt").addEventListener("click", () => {
-  if(!current){ return; }
-  const sel = document.getElementById("evt-eleve");
-  sel.innerHTML = "";
-  (CLASSES[current.classe] || []).forEach(n => sel.appendChild(new Option(n, n)));
-  document.getElementById("evt-type").value = "progres";
-  document.getElementById("evt-detail").value = "";
-  modalEvt.classList.add("is-visible");
-});
-document.getElementById("btn-evt-cancel").addEventListener("click", () => modalEvt.classList.remove("is-visible"));
-document.getElementById("btn-evt-confirm").addEventListener("click", () => {
-  const eleve = document.getElementById("evt-eleve").value;
-  const type = document.getElementById("evt-type").value;
-  const detail = document.getElementById("evt-detail").value.trim();
-  if(!eleve) return;
-  current.evenements.push({ eleve, type, detail });
-  renderEvtList();
-  modalEvt.classList.remove("is-visible");
-});
+/* Résume un axe (travail ou attitude) d'une séance : qui a été noté 👍, qui a été noté 👎. */
+function summarizeAxis(axisData){
+  const pos = [], neg = [];
+  Object.entries(axisData || {}).forEach(([nom, val]) => {
+    if(val === "positif") pos.push(nom);
+    else if(val === "negatif") neg.push(nom);
+  });
+  return { pos, neg };
+}
+function summarizeAxisHtml(axisData){
+  const { pos, neg } = summarizeAxis(axisData);
+  return `👍 (${pos.length}) : ${pos.map(escapeHtml).join(", ") || "—"}<br>👎 (${neg.length}) : ${neg.map(escapeHtml).join(", ") || "—"}`;
+}
+function summarizeAxisPlain(axisData){
+  const { pos, neg } = summarizeAxis(axisData);
+  return `Positif : ${pos.join(", ") || "aucun"}  |  À travailler : ${neg.join(", ") || "aucun"}`;
+}
 
 /* --- Enregistrement de la séance --- */
 document.getElementById("btn-save").addEventListener("click", () => {
@@ -833,6 +857,9 @@ function renderHistorique(){
     const presentCount = Object.values(s.presence).filter(v => v === "present").length;
     const absentCount = Object.values(s.presence).filter(v => v === "absent").length;
     const dispenseCount = Object.values(s.presence).filter(v => v === "dispense").length;
+    const travailNeg = summarizeAxis(s.travail).neg.length;
+    const attitudeNeg = summarizeAxis(s.attitude).neg.length;
+    const nbRemarques = Object.values(s.remarques || {}).filter(t => t && t.trim()).length;
 
     const card = document.createElement("div");
     card.className = "seance-card";
@@ -848,7 +875,9 @@ function renderHistorique(){
         <span class="badge">${dispenseCount} dispensé(s)</span>
         <span class="badge">Engagement : ${s.engagement}</span>
         <span class="badge">Comportement : ${s.comportement}</span>
-        <span class="badge">${s.evenements.length} événement(s)</span>
+        ${travailNeg > 0 ? `<span class="badge">⚠️ Travail : ${travailNeg}</span>` : ""}
+        ${attitudeNeg > 0 ? `<span class="badge">⚠️ Attitude : ${attitudeNeg}</span>` : ""}
+        ${nbRemarques > 0 ? `<span class="badge">${nbRemarques} remarque(s)</span>` : ""}
       </div>
     `;
     card.addEventListener("click", () => openSeanceModal(s.id));
@@ -884,7 +913,10 @@ document.getElementById("btn-seance-pdf").addEventListener("click", () => {
 
 function buildSeanceDetailHtml(s){
   const presentsList = groupPresence(s);
-  const evts = s.evenements.map(e => `<li><span class="evt-item__tag tag-${e.type}">${EVT_LABELS[e.type]}</span><b>${escapeHtml(e.eleve)}</b> — ${escapeHtml(e.detail||"")}</li>`).join("") || "<li>Aucun</li>";
+  const remarquesHtml = Object.entries(s.remarques || {})
+    .filter(([, txt]) => txt && txt.trim())
+    .map(([nom, txt]) => `<li><b>${escapeHtml(nom)}</b> — ${escapeHtml(txt)}</li>`)
+    .join("") || "<li>Aucune</li>";
   return `
     <dl>
       <dt>Date</dt><dd>${frDate(s.date)}</dd>
@@ -893,7 +925,9 @@ function buildSeanceDetailHtml(s){
       <dt>Présence</dt><dd>${presentsList}</dd>
       <dt>Contenu réel</dt><dd>${escapeHtml(s.contenu || "—")}</dd>
       <dt>Critères globaux</dt><dd>Engagement : ${s.engagement} · Comportement : ${s.comportement} · Objectif atteint : ${s.objectif}</dd>
-      <dt>Événements individuels</dt><dd><ul>${evts}</ul></dd>
+      <dt>Travail (par élève)</dt><dd>${summarizeAxisHtml(s.travail)}</dd>
+      <dt>Attitude (par élève)</dt><dd>${summarizeAxisHtml(s.attitude)}</dd>
+      <dt>Remarques</dt><dd><ul>${remarquesHtml}</ul></dd>
     </dl>
   `;
 }
@@ -930,16 +964,17 @@ function renderBilanIndividuel(){
   const dispense = seances.filter(s => s.presence[eleve] === "dispense").length;
   const implication = seances.filter(s => s.implication_sociale[eleve]).length;
 
-  const evts = [];
-  seances.forEach(s => s.evenements.filter(e => e.eleve === eleve).forEach(e => evts.push({...e, date:s.date})));
-  const progres = evts.filter(e => e.type === "progres").length;
-  const difficultes = evts.filter(e => e.type === "difficulte").length;
-  const compPos = evts.filter(e => e.type === "comportement_positif").length;
-  const compNeg = evts.filter(e => e.type === "comportement_negatif").length;
-  const implicNotable = evts.filter(e => e.type === "implication_sociale").length;
-
-  const engagementScore = scoreFromList(seances.map(s => s.engagement), {faible:0, moyen:1, bon:2});
-  const comportementScore = scoreFromList(seances.map(s => s.comportement), {ras:2, moyen:1, difficile:0});
+  // Tags rapides Travail / Attitude, comptés séance par séance pour cet élève.
+  let travailPos = 0, travailNeg = 0, attitudePos = 0, attitudeNeg = 0;
+  const remarquesList = [];
+  seances.forEach(s => {
+    const tv = (s.travail || {})[eleve];
+    if(tv === "positif") travailPos++; else if(tv === "negatif") travailNeg++;
+    const at = (s.attitude || {})[eleve];
+    if(at === "positif") attitudePos++; else if(at === "negatif") attitudeNeg++;
+    const rem = (s.remarques || {})[eleve];
+    if(rem && rem.trim()) remarquesList.push({ date: s.date, texte: rem.trim() });
+  });
 
   const carnetData = loadCarnet();
   const cyclesRencontres = [...new Set(seances.map(s => `${s.classe}||${s.apsa}`))];
@@ -950,58 +985,66 @@ function renderBilanIndividuel(){
     })
     .filter(c => c.texte && c.texte.trim());
 
+  // Repli : si aucune évaluation par cycle n'existe encore mais qu'une
+  // ancienne saisie "1 texte par élève" a été réimportée, on l'affiche
+  // quand même, distinguée comme non rattachée à un cycle précis.
+  if(carnetEntries.length === 0 && carnetData[eleve] && carnetData[eleve].trim()){
+    carnetEntries.push({ classe: null, apsa: "Ancienne saisie (cycle non précisé)", texte: carnetData[eleve] });
+  }
+
   let txtAssiduite = `${eleve} a été présent(e) à ${present} séance(s) sur ${total} (${pct(present,total)}%), absent(e) à ${absent} séance(s)`+
     (dispense ? `, et dispensé(e) présent(e) à ${dispense} séance(s)` : "") + ".";
 
-  let txtParticipation = engagementScore >= 1.4
-    ? `L'engagement observé sur la période est globalement bon, l'élève s'investit dans les situations proposées.`
-    : engagementScore >= 0.8
-    ? `L'engagement observé est irrégulier : des séances bien investies alternent avec des moments plus en retrait.`
-    : `L'engagement observé est en retrait sur cette période ; un travail sur la motivation et la mise en activité est à poursuivre.`;
+  // Principe : l'absence de tag négatif est considérée comme correcte par
+  // défaut. Seuls les écarts (positifs ou négatifs) explicitement notés
+  // pendant les séances alimentent ce texte.
+  let txtTravail = (travailPos === 0 && travailNeg === 0)
+    ? `Aucun écart n'a été relevé sur l'investissement dans le travail : l'attitude face aux tâches proposées a été correcte sur l'ensemble de la période.`
+    : travailNeg === 0
+    ? `L'investissement dans le travail a été noté positivement à ${travailPos} reprise(s), sans écart relevé.`
+    : travailPos >= travailNeg
+    ? `L'investissement est globalement positif (${travailPos} fois noté) malgré ${travailNeg} écart(s) relevé(s).`
+    : `Des écarts d'investissement dans le travail ont été relevés à ${travailNeg} reprise(s), contre ${travailPos} moment(s) positif(s) noté(s).`;
 
-  let txtAttitude = comportementScore >= 1.4
-    ? `Le comportement en cours reste correct (RAS) sur l'ensemble des séances observées.`
-    : comportementScore >= 0.8
-    ? `Le comportement est globalement satisfaisant, avec quelques écarts ponctuels à surveiller.`
-    : `Le comportement a nécessité des rappels au cadre à plusieurs reprises sur la période.`;
+  let txtAttitude = (attitudePos === 0 && attitudeNeg === 0)
+    ? `Aucun écart n'a été relevé sur l'attitude envers les autres : le comportement a été correct sur l'ensemble de la période.`
+    : attitudeNeg === 0
+    ? `L'attitude envers les autres a été notée positivement à ${attitudePos} reprise(s), sans écart relevé.`
+    : attitudePos >= attitudeNeg
+    ? `L'attitude envers les autres est globalement positive (${attitudePos} fois notée) malgré ${attitudeNeg} écart(s) relevé(s).`
+    : `Des écarts d'attitude envers les autres ont été relevés à ${attitudeNeg} reprise(s), contre ${attitudePos} moment(s) positif(s) noté(s).`;
 
-  let txtProgression = progres > difficultes
-    ? `Les événements relevés font surtout état de progrès (${progres}) plutôt que de difficultés (${difficultes}), ce qui traduit une dynamique positive.`
-    : progres === difficultes && progres > 0
-    ? `Progrès (${progres}) et difficultés (${difficultes}) s'équilibrent sur la période ; la progression reste à consolider.`
-    : difficultes > 0
-    ? `Les difficultés relevées (${difficultes}) sont plus nombreuses que les progrès notés (${progres}) ; un accompagnement ciblé est recommandé.`
-    : `Aucun événement de progression n'a été relevé individuellement sur la période.`;
-
-  let txtImplication = (implication > 0 || implicNotable > 0)
-    ? `L'élève s'est montré(e) impliqué(e) socialement à ${implication} reprise(s) lors de dispenses, et ${implicNotable} événement(s) d'implication sociale notable ont été relevés (arbitrage, aide, organisation...).`
-    : `Aucune implication sociale particulière n'a été relevée sur la période (arbitrage, aide aux pairs, organisation...).`;
+  let txtImplication = implication > 0
+    ? `L'élève s'est montré(e) impliqué(e) socialement à ${implication} reprise(s) lors de dispenses (arbitrage, aide, organisation...).`
+    : `Aucune implication sociale particulière n'a été relevée sur la période lors des dispenses.`;
 
   let txtCarnet = carnetEntries.length
-    ? carnetEntries.map(c => `<strong>${escapeHtml(c.apsa)}</strong> (${escapeHtml(c.classe)}) : ${escapeHtml(c.texte.trim())}`).join("<br>")
+    ? carnetEntries.map(c => c.classe
+        ? `<strong>${escapeHtml(c.apsa)}</strong> (${escapeHtml(c.classe)}) : ${escapeHtml(c.texte.trim())}`
+        : `<strong>${escapeHtml(c.apsa)}</strong> : ${escapeHtml(c.texte.trim())}`
+      ).join("<br>")
     : `Aucune évaluation du carnet d'entraînement n'a été saisie pour cet élève sur cette période.`;
 
-  let txtEvtsDetail = evts.length
-    ? evts.map(e => `• ${frDate(e.date)} — ${EVT_LABELS[e.type]} : ${e.detail || "—"}`).join("<br>")
-    : "Aucun événement individuel enregistré sur la période.";
+  let txtRemarques = remarquesList.length
+    ? remarquesList.map(r => `• ${frDate(r.date)} — ${escapeHtml(r.texte)}`).join("<br>")
+    : "Aucune remarque libre enregistrée sur la période.";
 
   box.innerHTML = `
     <h3>Bilan individuel — ${escapeHtml(eleve)}</h3>
     <div class="bilan-stats">
       <div class="stat"><span class="stat__num">${total}</span><span class="stat__label">Séances</span></div>
       <div class="stat"><span class="stat__num">${pct(present,total)}%</span><span class="stat__label">Présence</span></div>
-      <div class="stat"><span class="stat__num">${compPos}/${compNeg}</span><span class="stat__label">Comport. +/-</span></div>
-      <div class="stat"><span class="stat__num">${progres}/${difficultes}</span><span class="stat__label">Progrès/Diff.</span></div>
+      <div class="stat"><span class="stat__num">${travailPos}/${travailNeg}</span><span class="stat__label">Travail +/-</span></div>
+      <div class="stat"><span class="stat__num">${attitudePos}/${attitudeNeg}</span><span class="stat__label">Attitude +/-</span></div>
     </div>
     <p>${txtAssiduite}</p>
-    <p>${txtParticipation}</p>
-    <p>${txtImplication}</p>
-    <p>${txtProgression}</p>
+    <p>${txtTravail}</p>
     <p>${txtAttitude}</p>
+    <p>${txtImplication}</p>
     <h3>Carnet d'entraînement</h3>
     <p>${txtCarnet}</p>
-    <h3>Détail des événements</h3>
-    <p>${txtEvtsDetail}</p>
+    <h3>Remarques</h3>
+    <p>${txtRemarques}</p>
   `;
 }
 
@@ -1031,10 +1074,11 @@ function renderBilanClasse(){
   const comportementScore = scoreFromList(seances.map(s=>s.comportement), {ras:2, moyen:1, difficile:0});
   const objectifScore = scoreFromList(seances.map(s=>s.objectif), {non:0, partiel:1, oui:2});
 
-  let evtsAll = [];
-  seances.forEach(s => s.evenements.forEach(e => evtsAll.push(e)));
-  const compNeg = evtsAll.filter(e=>e.type==="comportement_negatif").length;
-  const compPos = evtsAll.filter(e=>e.type==="comportement_positif").length;
+  let travailPosTot = 0, travailNegTot = 0, attitudePosTot = 0, attitudeNegTot = 0;
+  seances.forEach(s => {
+    Object.values(s.travail || {}).forEach(v => { if(v==="positif") travailPosTot++; else if(v==="negatif") travailNegTot++; });
+    Object.values(s.attitude || {}).forEach(v => { if(v==="positif") attitudePosTot++; else if(v==="negatif") attitudeNegTot++; });
+  });
 
   const dyn = engagementScore >= 1.4
     ? "Le groupe montre une dynamique collective positive, la majorité des élèves s'engage volontiers dans les tâches proposées."
@@ -1048,9 +1092,9 @@ function renderBilanClasse(){
     ? "Le respect des règles est en cours d'acquisition, avec des écarts qui restent gérables."
     : "Le respect des règles a nécessité des interventions régulières sur la période.";
 
-  const autonomie = (compPos >= compNeg)
-    ? "Le nombre d'événements de comportement positif relevés est supérieur ou égal à celui des comportements négatifs, ce qui traduit une autonomie en progrès."
-    : "Le nombre de comportements négatifs relevés dépasse celui des comportements positifs ; l'autonomie du groupe est encore à construire.";
+  const autonomie = (attitudePosTot >= attitudeNegTot)
+    ? "Le nombre de tags d'attitude positive relevés est supérieur ou égal à celui des écarts, ce qui traduit une autonomie en progrès."
+    : "Le nombre d'écarts d'attitude relevés dépasse celui des tags positifs ; l'autonomie du groupe est encore à construire.";
 
   const progressionCycle = objectifScore >= 1.4
     ? "Les objectifs de séance sont majoritairement atteints, la progression du cycle suit le rythme prévu."
@@ -1068,7 +1112,7 @@ function renderBilanClasse(){
       <div class="stat"><span class="stat__num">${total}</span><span class="stat__label">Séances</span></div>
       <div class="stat"><span class="stat__num">${pct(presentTot, elevesTot)}%</span><span class="stat__label">Présence moy.</span></div>
       <div class="stat"><span class="stat__num">${dispenseTot}</span><span class="stat__label">Dispenses</span></div>
-      <div class="stat"><span class="stat__num">${compPos}/${compNeg}</span><span class="stat__label">Comport. +/-</span></div>
+      <div class="stat"><span class="stat__num">${attitudePosTot}/${attitudeNegTot}</span><span class="stat__label">Attitude +/-</span></div>
     </div>
     <p>${dyn}</p>
     <p>${respect}</p>
@@ -1093,9 +1137,8 @@ function renderBilanProjet(){
   const comportementScore = scoreFromList(seances.map(s=>s.comportement), {ras:2, moyen:1, difficile:0});
   const objectifScore = scoreFromList(seances.map(s=>s.objectif), {non:0, partiel:1, oui:2});
 
-  let evtsAll = [];
-  seances.forEach(s => s.evenements.forEach(e => evtsAll.push(e)));
-  const implicNotable = evtsAll.filter(e=>e.type==="implication_sociale").length;
+  let implicationTot = 0;
+  seances.forEach(s => { implicationTot += Object.values(s.implication_sociale || {}).filter(Boolean).length; });
   const apsaSet = [...new Set(seances.map(s=>s.apsa))];
 
   const attitude = comportementScore >= 1.4
@@ -1104,9 +1147,9 @@ function renderBilanProjet(){
     ? "L'attitude générale du groupe est correcte, avec une marge de progression sur l'écoute et la coopération."
     : "L'attitude générale du groupe nécessite un travail continu sur le climat de classe et la coopération.";
 
-  const roles = implicNotable > 0
-    ? `${implicNotable} prise(s) de rôle social notable (arbitrage, observation, aide, organisation) ont été relevées, ce qui montre une appropriation progressive des rôles sociaux du programme.`
-    : "Peu de prises de rôle social ont été relevées jusqu'ici ; leur développement (arbitrage, observation, coaching) est un axe de travail pour la suite du projet de classe.";
+  const roles = implicationTot > 0
+    ? `${implicationTot} cas d'implication sociale ont été recensés parmi les élèves dispensés sur la période, ce qui montre une appropriation progressive des rôles sociaux du programme.`
+    : "Peu d'implication sociale a été recensée jusqu'ici parmi les élèves dispensés ; le développement des rôles sociaux (arbitrage, observation, coaching) est un axe de travail pour la suite du projet de classe.";
 
   const progMotrice = `Le cycle a couvert ${apsaSet.length} APSA (${apsaSet.join(", ")}). La progression motrice est à objectiver séance après séance à partir des critères d'objectif atteint (moyenne actuelle : ${objectifScore.toFixed(1)}/2).`;
 
@@ -1201,11 +1244,18 @@ function exportSeancePdf(s){
   h2("Critères globaux");
   p(`Engagement global : ${s.engagement}    Comportement global : ${s.comportement}    Objectif atteint : ${s.objectif}`);
 
-  h2("Événements individuels");
-  if(s.evenements.length === 0){
-    p("Aucun événement enregistré.");
+  h2("Travail (par élève)");
+  p(summarizeAxisPlain(s.travail));
+
+  h2("Attitude (par élève)");
+  p(summarizeAxisPlain(s.attitude));
+
+  h2("Remarques");
+  const remarqueEntries = Object.entries(s.remarques || {}).filter(([, t]) => t && t.trim());
+  if(remarqueEntries.length === 0){
+    p("Aucune remarque.");
   } else {
-    s.evenements.forEach(e => p(`• ${e.eleve} — ${EVT_LABELS[e.type]} : ${e.detail || "—"}`));
+    remarqueEntries.forEach(([nom, txt]) => p(`• ${nom} — ${txt}`));
   }
 
   const filename = `bilan_${s.classe}_${s.date}.pdf`.replace(/\s+/g,"_");
