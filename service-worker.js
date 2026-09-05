@@ -4,7 +4,7 @@
    cache-first avec repli réseau, pour un fonctionnement 100% hors-ligne
    une fois la première visite effectuée.
    ========================================================================== */
-const CACHE_NAME = "carnet-eps-v4";
+const CACHE_NAME = "carnet-eps-v5";
 
 const APP_SHELL = [
   "./",
