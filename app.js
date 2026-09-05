@@ -76,6 +76,17 @@ function saveApsaData(){
 let CLASSES = loadClassesData();
 let APSA_LIST = loadApsaData();
 
+/* Trie les élèves d'une classe par ordre alphabétique (accents gérés).
+   Appelé à chaque ajout/renommage pour que l'ordre affiché reste toujours
+   à jour, sans jamais placer les nouveaux élèves en fin de liste. */
+function sortClasse(classe){
+  if(CLASSES[classe]) CLASSES[classe].sort((a, b) => a.localeCompare(b, "fr"));
+}
+// Normalise une bonne fois pour toutes les classes déjà enregistrées
+// (au cas où des élèves auraient été ajoutés avant cette mise à jour).
+Object.keys(CLASSES).forEach(sortClasse);
+saveClassesData();
+
 function loadSeances(){
   try { return JSON.parse(localStorage.getItem(LS_SEANCES)) || []; }
   catch(e){ return []; }
@@ -306,6 +317,7 @@ function mergeImportedData(data){
     (data.classes[classe] || []).forEach(nom => {
       if(!CLASSES[classe].includes(nom)){ CLASSES[classe].push(nom); addedEleves++; }
     });
+    sortClasse(classe);
   });
   saveClassesData();
 
@@ -449,7 +461,9 @@ function renderClassesAdmin(){
         const v = input.value.trim();
         if(!v){ input.value = nom; return; }
         CLASSES[classe][idx] = v;
+        sortClasse(classe);
         saveClassesData();
+        renderClassesAdmin();
         refreshAfterClassesEdit();
       });
 
@@ -479,6 +493,7 @@ function renderClassesAdmin(){
       const nom = prompt(`Nom du nouvel élève pour la classe ${classe} :`);
       if(!nom || !nom.trim()) return;
       CLASSES[classe].push(nom.trim());
+      sortClasse(classe);
       saveClassesData();
       renderClassesAdmin();
       refreshAfterClassesEdit();
@@ -559,6 +574,7 @@ function importClassesCsv(text){
     if(!CLASSES[classe]){ CLASSES[classe] = []; addedClasses++; }
     if(!CLASSES[classe].includes(eleve)){ CLASSES[classe].push(eleve); addedEleves++; }
   });
+  Object.keys(CLASSES).forEach(sortClasse);
   saveClassesData();
   return { classes: addedClasses, eleves: addedEleves };
 }
