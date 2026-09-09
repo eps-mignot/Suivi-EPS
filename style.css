@@ -221,6 +221,12 @@ textarea{ resize: vertical; line-height:1.45; }
 .eval-btn.is-active{ filter:none; }
 .eval-btn--positif.is-active{ background: var(--present-bg); border-color: var(--present); }
 .eval-btn--negatif.is-active{ background: var(--absent-bg); border-color: var(--absent); }
+.oubli-btn{
+  appearance:none; cursor:pointer; border-radius: 999px;
+  border: 2px solid var(--line); background: var(--surface);
+  font-size:.78rem; font-weight:700; padding: 6px 12px; color: var(--text-soft);
+}
+.oubli-btn.is-active{ background: var(--dispense-bg); border-color: var(--dispense); color: var(--dispense); }
 .remarque-input{
   flex: 1 1 160px; min-width: 140px;
   border: 2px solid var(--line); border-radius: var(--radius-s);
