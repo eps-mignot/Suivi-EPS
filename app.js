@@ -145,6 +145,8 @@ function newCurrent(classe, apsa){
     // Évaluation rapide par élève, en 1 tap : "positif" | "negatif" | absent = neutre.
     travail: {},
     attitude: {},
+    // Oubli de tenue : true si coché pour cet élève sur cette séance.
+    oublis: {},
     // Petit mot libre optionnel par élève pour cette séance.
     remarques: {}
   };
@@ -685,13 +687,24 @@ function renderEleves(){
     top.appendChild(pillGroup);
     li.appendChild(top);
 
-    // -- ligne d'évaluation rapide : Travail / Attitude / Remarque -- 
+    // -- ligne d'évaluation rapide : Travail / Attitude / Oubli / Remarque -- 
     // Masquée pour les absents (rien à évaluer).
     if(etat !== "absent"){
       const evalRow = document.createElement("div");
       evalRow.className = "eleve-row__eval";
       evalRow.appendChild(buildEvalGroup(nom, "travail", "Travail"));
       evalRow.appendChild(buildEvalGroup(nom, "attitude", "Attitude"));
+
+      const oubliBtn = document.createElement("button");
+      oubliBtn.type = "button";
+      oubliBtn.className = "oubli-btn" + (current.oublis[nom] ? " is-active" : "");
+      oubliBtn.textContent = "🎽 Oubli tenue";
+      oubliBtn.setAttribute("aria-label", `Oubli de tenue pour ${nom}`);
+      oubliBtn.addEventListener("click", () => {
+        if(current.oublis[nom]){ delete current.oublis[nom]; } else { current.oublis[nom] = true; }
+        oubliBtn.classList.toggle("is-active", !!current.oublis[nom]);
+      });
+      evalRow.appendChild(oubliBtn);
 
       const remarqueInput = document.createElement("input");
       remarqueInput.type = "text";
@@ -875,6 +888,7 @@ function renderHistorique(){
     const dispenseCount = Object.values(s.presence).filter(v => v === "dispense").length;
     const travailNeg = summarizeAxis(s.travail).neg.length;
     const attitudeNeg = summarizeAxis(s.attitude).neg.length;
+    const nbOublis = Object.values(s.oublis || {}).filter(Boolean).length;
     const nbRemarques = Object.values(s.remarques || {}).filter(t => t && t.trim()).length;
 
     const card = document.createElement("div");
@@ -893,6 +907,7 @@ function renderHistorique(){
         <span class="badge">Comportement : ${s.comportement}</span>
         ${travailNeg > 0 ? `<span class="badge">⚠️ Travail : ${travailNeg}</span>` : ""}
         ${attitudeNeg > 0 ? `<span class="badge">⚠️ Attitude : ${attitudeNeg}</span>` : ""}
+        ${nbOublis > 0 ? `<span class="badge">🎽 Oubli(s) : ${nbOublis}</span>` : ""}
         ${nbRemarques > 0 ? `<span class="badge">${nbRemarques} remarque(s)</span>` : ""}
       </div>
     `;
@@ -929,6 +944,7 @@ document.getElementById("btn-seance-pdf").addEventListener("click", () => {
 
 function buildSeanceDetailHtml(s){
   const presentsList = groupPresence(s);
+  const oublisNoms = Object.entries(s.oublis || {}).filter(([, v]) => v).map(([nom]) => nom);
   const remarquesHtml = Object.entries(s.remarques || {})
     .filter(([, txt]) => txt && txt.trim())
     .map(([nom, txt]) => `<li><b>${escapeHtml(nom)}</b> — ${escapeHtml(txt)}</li>`)
@@ -943,6 +959,7 @@ function buildSeanceDetailHtml(s){
       <dt>Critères globaux</dt><dd>Engagement : ${s.engagement} · Comportement : ${s.comportement} · Objectif atteint : ${s.objectif}</dd>
       <dt>Travail (par élève)</dt><dd>${summarizeAxisHtml(s.travail)}</dd>
       <dt>Attitude (par élève)</dt><dd>${summarizeAxisHtml(s.attitude)}</dd>
+      <dt>Oubli(s) de tenue</dt><dd>${oublisNoms.length ? oublisNoms.map(escapeHtml).join(", ") : "—"}</dd>
       <dt>Remarques</dt><dd><ul>${remarquesHtml}</ul></dd>
     </dl>
   `;
@@ -979,6 +996,7 @@ function renderBilanIndividuel(){
   const absent = seances.filter(s => s.presence[eleve] === "absent").length;
   const dispense = seances.filter(s => s.presence[eleve] === "dispense").length;
   const implication = seances.filter(s => s.implication_sociale[eleve]).length;
+  const oublisCount = seances.filter(s => s.oublis && s.oublis[eleve]).length;
 
   // Tags rapides Travail / Attitude, comptés séance par séance pour cet élève.
   let travailPos = 0, travailNeg = 0, attitudePos = 0, attitudeNeg = 0;
@@ -1034,6 +1052,10 @@ function renderBilanIndividuel(){
     ? `L'élève s'est montré(e) impliqué(e) socialement à ${implication} reprise(s) lors de dispenses (arbitrage, aide, organisation...).`
     : `Aucune implication sociale particulière n'a été relevée sur la période lors des dispenses.`;
 
+  let txtOublis = oublisCount > 0
+    ? `${oublisCount} oubli(s) de tenue ${oublisCount > 1 ? "ont" : "a"} été relevé(s) pour cet élève sur la période (sur ${total} séance(s)).`
+    : `Aucun oubli de tenue n'a été relevé pour cet élève sur la période.`;
+
   let txtCarnet = carnetEntries.length
     ? carnetEntries.map(c => c.classe
         ? `<strong>${escapeHtml(c.apsa)}</strong> (${escapeHtml(c.classe)}) : ${escapeHtml(c.texte.trim())}`
@@ -1052,11 +1074,13 @@ function renderBilanIndividuel(){
       <div class="stat"><span class="stat__num">${pct(present,total)}%</span><span class="stat__label">Présence</span></div>
       <div class="stat"><span class="stat__num">${travailPos}/${travailNeg}</span><span class="stat__label">Travail +/-</span></div>
       <div class="stat"><span class="stat__num">${attitudePos}/${attitudeNeg}</span><span class="stat__label">Attitude +/-</span></div>
+      <div class="stat"><span class="stat__num">${oublisCount}</span><span class="stat__label">Oublis tenue</span></div>
     </div>
     <p>${txtAssiduite}</p>
     <p>${txtTravail}</p>
     <p>${txtAttitude}</p>
     <p>${txtImplication}</p>
+    <p>${txtOublis}</p>
     <h3>Carnet d'entraînement</h3>
     <p>${txtCarnet}</p>
     <h3>Remarques</h3>
@@ -1077,7 +1101,7 @@ function renderBilanClasse(){
     return;
   }
   const total = seances.length;
-  let presentTot=0, absentTot=0, dispenseTot=0, implicationTot=0, elevesTot=0;
+  let presentTot=0, absentTot=0, dispenseTot=0, implicationTot=0, elevesTot=0, oublisTot=0;
   seances.forEach(s => {
     const vals = Object.values(s.presence);
     elevesTot += vals.length;
@@ -1085,6 +1109,7 @@ function renderBilanClasse(){
     absentTot += vals.filter(v=>v==="absent").length;
     dispenseTot += vals.filter(v=>v==="dispense").length;
     implicationTot += Object.values(s.implication_sociale).filter(Boolean).length;
+    oublisTot += Object.values(s.oublis || {}).filter(Boolean).length;
   });
   const engagementScore = scoreFromList(seances.map(s=>s.engagement), {faible:0, moyen:1, bon:2});
   const comportementScore = scoreFromList(seances.map(s=>s.comportement), {ras:2, moyen:1, difficile:0});
@@ -1095,6 +1120,16 @@ function renderBilanClasse(){
     Object.values(s.travail || {}).forEach(v => { if(v==="positif") travailPosTot++; else if(v==="negatif") travailNegTot++; });
     Object.values(s.attitude || {}).forEach(v => { if(v==="positif") attitudePosTot++; else if(v==="negatif") attitudeNegTot++; });
   });
+
+  // Repère les élèves tagués négativement à plusieurs reprises (pas un
+  // incident isolé), pour nuancer le bilan général du groupe si un petit
+  // noyau d'élèves concentre les écarts.
+  const recurrentsAttitude = tallyNegatifsParEleve(seances, "attitude");
+  const recurrentsTravail = tallyNegatifsParEleve(seances, "travail");
+  const txtRecurrentsAttitude = phraseRecurrents(recurrentsAttitude, "l'attitude envers les autres");
+  const txtRecurrentsTravail = phraseRecurrents(recurrentsTravail, "l'investissement dans le travail");
+  const recurrentsOublis = tallyOublisParEleve(seances);
+  const txtRecurrentsOublis = phraseRecurrents(recurrentsOublis, "les oublis de tenue");
 
   const dyn = engagementScore >= 1.4
     ? "Le groupe montre une dynamique collective positive, la majorité des élèves s'engage volontiers dans les tâches proposées."
@@ -1122,6 +1157,10 @@ function renderBilanClasse(){
     ? `${implicationTot} cas d'implication sociale ont été recensés parmi les élèves dispensés sur la période.`
     : "Aucune implication sociale particulière n'a été recensée parmi les élèves dispensés sur la période.";
 
+  const oublisTxt = oublisTot > 0
+    ? `${oublisTot} oubli(s) de tenue ${oublisTot > 1 ? "ont" : "a"} été comptabilisé(s) sur la période.`
+    : "Aucun oubli de tenue n'a été comptabilisé sur la période.";
+
   box.innerHTML = `
     <h3>Bilan de classe — ${escapeHtml(classe)}</h3>
     <div class="bilan-stats">
@@ -1129,13 +1168,59 @@ function renderBilanClasse(){
       <div class="stat"><span class="stat__num">${pct(presentTot, elevesTot)}%</span><span class="stat__label">Présence moy.</span></div>
       <div class="stat"><span class="stat__num">${dispenseTot}</span><span class="stat__label">Dispenses</span></div>
       <div class="stat"><span class="stat__num">${attitudePosTot}/${attitudeNegTot}</span><span class="stat__label">Attitude +/-</span></div>
+      <div class="stat"><span class="stat__num">${oublisTot}</span><span class="stat__label">Oublis tenue</span></div>
     </div>
     <p>${dyn}</p>
     <p>${respect}</p>
     <p>${autonomie}</p>
+    ${txtRecurrentsAttitude ? `<p>${txtRecurrentsAttitude}</p>` : ""}
+    ${txtRecurrentsTravail ? `<p>${txtRecurrentsTravail}</p>` : ""}
+    ${txtRecurrentsOublis ? `<p>${txtRecurrentsOublis}</p>` : ""}
     <p>${progressionCycle}</p>
     <p>${implicationTxt}</p>
+    <p>${oublisTxt}</p>
   `;
+}
+
+/* Compte, pour un axe donné (travail ou attitude), combien de fois chaque
+   élève a été tagué "negatif" sur la période. Ne garde que les élèves
+   apparus au moins 2 fois (pour distinguer un vrai profil récurrent d'un
+   simple incident isolé sur une séance). Trié du plus concerné au moins. */
+function tallyNegatifsParEleve(seances, axis){
+  const tally = {};
+  seances.forEach(s => {
+    Object.entries(s[axis] || {}).forEach(([nom, val]) => {
+      if(val === "negatif") tally[nom] = (tally[nom] || 0) + 1;
+    });
+  });
+  return Object.entries(tally)
+    .filter(([, c]) => c >= 2)
+    .sort((a, b) => b[1] - a[1]);
+}
+
+/* Même principe que ci-dessus, mais pour les oublis de tenue (valeur
+   booléenne plutôt que "positif"/"negatif"). */
+function tallyOublisParEleve(seances){
+  const tally = {};
+  seances.forEach(s => {
+    Object.entries(s.oublis || {}).forEach(([nom, val]) => {
+      if(val) tally[nom] = (tally[nom] || 0) + 1;
+    });
+  });
+  return Object.entries(tally)
+    .filter(([, c]) => c >= 2)
+    .sort((a, b) => b[1] - a[1]);
+}
+
+/* Construit une phrase de nuance si un petit groupe d'élèves concentre les
+   écarts sur un axe donné. Retourne une chaîne vide si personne ne se
+   détache (aucune phrase n'est alors affichée). */
+function phraseRecurrents(recurrents, libelle){
+  if(recurrents.length === 0) return "";
+  const noms = recurrents.map(([nom, c]) => `${escapeHtml(nom)} (${c} fois)`).join(", ");
+  return recurrents.length === 1
+    ? `Un profil se détache toutefois sur ${libelle} : ${noms} concentre une part notable des écarts relevés sur la période.`
+    : `Un noyau de ${recurrents.length} élève(s) concentre toutefois une part notable des écarts sur ${libelle} : ${noms}.`;
 }
 
 function renderBilanProjet(){
@@ -1265,6 +1350,10 @@ function exportSeancePdf(s){
 
   h2("Attitude (par élève)");
   p(summarizeAxisPlain(s.attitude));
+
+  h2("Oubli(s) de tenue");
+  const oublisNoms = Object.entries(s.oublis || {}).filter(([, v]) => v).map(([nom]) => nom);
+  p(oublisNoms.length ? oublisNoms.join(", ") : "Aucun");
 
   h2("Remarques");
   const remarqueEntries = Object.entries(s.remarques || {}).filter(([, t]) => t && t.trim());
