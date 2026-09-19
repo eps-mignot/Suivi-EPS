@@ -67,6 +67,13 @@
 
   <div id="seance-body" class="seance-body hidden">
 
+    <!-- Rappel automatique de la note "bilan à chaud / prévisions" laissée
+         lors de la dernière séance pour cette classe + cette APSA -->
+    <div id="rappel-precedente" class="rappel-box hidden">
+      <div class="rappel-box__label">📌 Notes de la séance précédente (<span id="rappel-date"></span>)</div>
+      <div id="rappel-texte" class="rappel-box__text"></div>
+    </div>
+
     <!-- Liste des eleves -->
     <section class="card">
       <h2 class="card__title">Élèves <span class="card__count" id="eleves-count"></span></h2>
@@ -82,6 +89,9 @@
     <section class="card">
       <h2 class="card__title">Contenu réel de la séance</h2>
       <textarea id="zone-libre" rows="6" placeholder="Ce qui a réellement été fait pendant la séance : échauffement, situations, consignes, régulations..."></textarea>
+
+      <h2 class="card__title card__title--spaced">Bilan à chaud &amp; prévisions pour la séance suivante</h2>
+      <textarea id="notes-suite" rows="4" placeholder="À chaud : comment ça s'est passé (comportement, attitude), ce qui est prévu ou à adapter pour la prochaine séance..."></textarea>
     </section>
 
     <!-- Criteres globaux -->
@@ -113,16 +123,6 @@
           </select>
         </div>
       </div>
-    </section>
-
-    <!-- Carnet d'entrainement -->
-    <section class="card">
-      <h2 class="card__title">Carnet d'entraînement élève <span class="card__count">(par cycle : classe + APSA en cours)</span></h2>
-      <div class="field">
-        <label for="sel-carnet-eleve">Élève</label>
-        <select id="sel-carnet-eleve"></select>
-      </div>
-      <textarea id="carnet-texte" rows="3" placeholder="Évaluation du carnet d'entraînement pour ce cycle (cette classe + cette APSA)..."></textarea>
     </section>
 
     <div class="actions-bar">
