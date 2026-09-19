@@ -36,7 +36,6 @@ const PRESENCE_LABELS = { present: "Présent", absent: "Absent", dispense: "Disp
 /* 2. STOCKAGE LOCAL                                                    */
 /* ------------------------------------------------------------------ */
 const LS_SEANCES = "eps_seances";
-const LS_CARNET  = "eps_carnet";   // { "classe||apsa||Nom": "texte" } — 1 entrée par cycle
 const LS_CLASSES = "eps_classes";  // { "6A": ["Nom1", "Nom2", ...], ... }
 const LS_APSA    = "eps_apsa";     // ["Demi-fond", "Handball", ...]
 
@@ -94,19 +93,6 @@ function loadSeances(){
 function saveSeances(list){
   localStorage.setItem(LS_SEANCES, JSON.stringify(list));
 }
-function loadCarnet(){
-  try { return JSON.parse(localStorage.getItem(LS_CARNET)) || {}; }
-  catch(e){ return {}; }
-}
-function saveCarnet(obj){
-  localStorage.setItem(LS_CARNET, JSON.stringify(obj));
-}
-/* Le carnet est évalué par cycle : une entrée distincte par élève, pour
-   chaque combinaison classe + APSA. Ainsi un cycle Handball et un cycle
-   Natation pour le même élève ne s'écrasent jamais l'un l'autre. */
-function carnetKey(classe, apsa, eleve){
-  return `${classe}||${apsa}||${eleve}`;
-}
 
 function uid(){
   return "s_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2,8);
@@ -139,6 +125,10 @@ function newCurrent(classe, apsa){
     presence,
     implication_sociale: {},
     contenu: "",
+    // Bilan à chaud, écrit juste après la séance : ce qui s'est passé et ce
+    // qui est prévu/à surveiller pour la prochaine séance (attitude,
+    // adaptations, points de vigilance...). Champ libre, non structuré.
+    notesSuite: "",
     engagement: "moyen",
     comportement: "moyen",
     objectif: "partiel",
@@ -276,8 +266,8 @@ function renderApsaAdmin(){
 
 /* ------------------------------------------------------------------ */
 /* 4quater. SAUVEGARDE COMPLETE (export/import JSON pour transférer     */
-/* toutes les données — classes, APSA, séances, carnets — entre         */
-/* plusieurs appareils, ex: PC et smartphone).                          */
+/* toutes les données — classes, APSA, séances — entre plusieurs         */
+/* appareils, ex: PC et smartphone).                                    */
 /* ------------------------------------------------------------------ */
 const BACKUP_VERSION = 1;
 
@@ -288,8 +278,7 @@ document.getElementById("btn-export-all").addEventListener("click", () => {
     exportedAt: new Date().toISOString(),
     classes: CLASSES,
     apsa: APSA_LIST,
-    seances: loadSeances(),
-    carnet: loadCarnet()
+    seances: loadSeances()
   };
   const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
@@ -307,12 +296,9 @@ document.getElementById("btn-export-all").addEventListener("click", () => {
    - Classes/élèves/APSA : union (ajoute ce qui manque, dédoublonné).
    - Séances : ajoutées si leur identifiant unique n'existe pas déjà ici
      (chaque séance créée sur n'importe quel appareil a un id unique,
-     donc deux séances différentes ne peuvent jamais entrer en conflit).
-   - Carnet d'entraînement : complète les élèves sans texte local, mais ne
-     remplace jamais un texte déjà saisi sur cet appareil (pas d'horodatage
-     fiable pour arbitrer un conflit texte contre texte). */
+     donc deux séances différentes ne peuvent jamais entrer en conflit). */
 function mergeImportedData(data){
-  let addedClasses = 0, addedEleves = 0, addedApsa = 0, addedCarnet = 0, skippedCarnet = 0;
+  let addedClasses = 0, addedEleves = 0, addedApsa = 0;
 
   Object.keys(data.classes || {}).forEach(classe => {
     if(!CLASSES[classe]){ CLASSES[classe] = []; addedClasses++; }
@@ -340,20 +326,7 @@ function mergeImportedData(data){
   });
   saveSeances(existingSeances);
 
-  const localCarnet = loadCarnet();
-  Object.entries(data.carnet || {}).forEach(([nom, texte]) => {
-    if(!texte || !texte.trim()) return;
-    const local = localCarnet[nom];
-    if(!local || !local.trim()){
-      localCarnet[nom] = texte;
-      addedCarnet++;
-    } else if(local.trim() !== texte.trim()){
-      skippedCarnet++; // conflit : on garde le texte local, on prévient l'utilisateur
-    }
-  });
-  saveCarnet(localCarnet);
-
-  return { addedClasses, addedEleves, addedApsa, addedSeances, addedCarnet, skippedCarnet };
+  return { addedClasses, addedEleves, addedApsa, addedSeances };
 }
 
 document.getElementById("import-all-input").addEventListener("change", (e) => {
@@ -371,12 +344,7 @@ document.getElementById("import-all-input").addEventListener("change", (e) => {
         `Import fusionné avec succès :\n` +
         `• ${result.addedSeances} nouvelle(s) séance(s) ajoutée(s)\n` +
         `• ${result.addedClasses} nouvelle(s) classe(s), ${result.addedEleves} nouvel(le)(s) élève(s)\n` +
-        `• ${result.addedApsa} nouvelle(s) APSA\n` +
-        `• ${result.addedCarnet} carnet(s) d'entraînement complété(s)\n\n` +
-        (result.skippedCarnet > 0
-          ? `⚠️ ${result.skippedCarnet} carnet(s) existaient déjà sur les deux appareils avec un texte différent : ` +
-            `le texte de CET appareil a été conservé. Vérifiez-les si besoin.\n\n`
-          : "") +
+        `• ${result.addedApsa} nouvelle(s) APSA\n\n` +
         `L'application va se recharger.`
       );
       location.reload();
@@ -639,9 +607,27 @@ function onClasseOrApsaChange(){
   current = newCurrent(classe, apsa);
   body.classList.remove("hidden");
   renderEleves();
-  renderCarnetSelect();
   document.getElementById("zone-libre").value = "";
+  document.getElementById("notes-suite").value = "";
   document.getElementById("save-flash").textContent = "";
+  showRappelPrecedente(classe, apsa);
+}
+
+/* Affiche, en haut de l'écran Séance, le "bilan à chaud / prévisions" laissé
+   lors de la dernière séance enregistrée pour cette même classe + APSA
+   (le cycle en cours). Rien ne s'affiche si aucune note n'a été laissée. */
+function showRappelPrecedente(classe, apsa){
+  const box = document.getElementById("rappel-precedente");
+  const derniere = loadSeances()
+    .filter(s => s.classe === classe && s.apsa === apsa && s.notesSuite && s.notesSuite.trim())
+    .sort((a, b) => b.date.localeCompare(a.date))[0];
+  if(!derniere){
+    box.classList.add("hidden");
+    return;
+  }
+  document.getElementById("rappel-date").textContent = frDate(derniere.date);
+  document.getElementById("rappel-texte").textContent = derniere.notesSuite.trim();
+  box.classList.remove("hidden");
 }
 document.getElementById("sel-classe").addEventListener("change", onClasseOrApsaChange);
 document.getElementById("sel-apsa").addEventListener("change", onClasseOrApsaChange);
@@ -770,29 +756,6 @@ function buildEvalGroup(nom, axis, label){
   return group;
 }
 
-function renderCarnetSelect(){
-  const sel = document.getElementById("sel-carnet-eleve");
-  sel.innerHTML = "";
-  (CLASSES[current.classe] || []).forEach(n => sel.appendChild(new Option(n, n)));
-  const fillTextarea = () => {
-    const carnet = loadCarnet();
-    const key = carnetKey(current.classe, current.apsa, sel.value);
-    // Repli : si rien n'existe encore pour ce cycle précis, on affiche
-    // l'ancienne saisie "1 texte par élève" (versions antérieures de l'app),
-    // pour ne rien perdre lors d'une réimportation d'une ancienne sauvegarde.
-    const valeur = carnet[key] !== undefined ? carnet[key] : (carnet[sel.value] || "");
-    document.getElementById("carnet-texte").value = valeur;
-  };
-  fillTextarea();
-  sel.onchange = fillTextarea;
-  document.getElementById("carnet-texte").oninput = () => {
-    const c = loadCarnet();
-    const key = carnetKey(current.classe, current.apsa, sel.value);
-    c[key] = document.getElementById("carnet-texte").value;
-    saveCarnet(c);
-  };
-}
-
 function escapeHtml(s){
   return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
@@ -820,6 +783,7 @@ document.getElementById("btn-save").addEventListener("click", () => {
   if(!current){ return; }
   current.date = document.getElementById("inp-date").value || todayISO();
   current.contenu = document.getElementById("zone-libre").value;
+  current.notesSuite = document.getElementById("notes-suite").value;
   current.engagement = document.getElementById("sel-engagement").value;
   current.comportement = document.getElementById("sel-comportement").value;
   current.objectif = document.getElementById("sel-objectif").value;
@@ -836,6 +800,7 @@ document.getElementById("btn-save").addEventListener("click", () => {
   current = newCurrent(current.classe, current.apsa);
   renderEleves();
   document.getElementById("zone-libre").value = "";
+  document.getElementById("notes-suite").value = "";
 });
 
 /* ------------------------------------------------------------------ */
@@ -909,6 +874,7 @@ function renderHistorique(){
         ${attitudeNeg > 0 ? `<span class="badge">⚠️ Attitude : ${attitudeNeg}</span>` : ""}
         ${nbOublis > 0 ? `<span class="badge">🎽 Oubli(s) : ${nbOublis}</span>` : ""}
         ${nbRemarques > 0 ? `<span class="badge">${nbRemarques} remarque(s)</span>` : ""}
+        ${s.notesSuite && s.notesSuite.trim() ? `<span class="badge">📌 Notes pour la suite</span>` : ""}
       </div>
     `;
     card.addEventListener("click", () => openSeanceModal(s.id));
@@ -956,6 +922,7 @@ function buildSeanceDetailHtml(s){
       <dt>APSA</dt><dd>${escapeHtml(s.apsa)}</dd>
       <dt>Présence</dt><dd>${presentsList}</dd>
       <dt>Contenu réel</dt><dd>${escapeHtml(s.contenu || "—")}</dd>
+      <dt>Bilan à chaud / Prévisions</dt><dd>${escapeHtml(s.notesSuite || "—")}</dd>
       <dt>Critères globaux</dt><dd>Engagement : ${s.engagement} · Comportement : ${s.comportement} · Objectif atteint : ${s.objectif}</dd>
       <dt>Travail (par élève)</dt><dd>${summarizeAxisHtml(s.travail)}</dd>
       <dt>Attitude (par élève)</dt><dd>${summarizeAxisHtml(s.attitude)}</dd>
@@ -1010,22 +977,6 @@ function renderBilanIndividuel(){
     if(rem && rem.trim()) remarquesList.push({ date: s.date, texte: rem.trim() });
   });
 
-  const carnetData = loadCarnet();
-  const cyclesRencontres = [...new Set(seances.map(s => `${s.classe}||${s.apsa}`))];
-  const carnetEntries = cyclesRencontres
-    .map(key => {
-      const [classe, apsa] = key.split("||");
-      return { classe, apsa, texte: carnetData[carnetKey(classe, apsa, eleve)] };
-    })
-    .filter(c => c.texte && c.texte.trim());
-
-  // Repli : si aucune évaluation par cycle n'existe encore mais qu'une
-  // ancienne saisie "1 texte par élève" a été réimportée, on l'affiche
-  // quand même, distinguée comme non rattachée à un cycle précis.
-  if(carnetEntries.length === 0 && carnetData[eleve] && carnetData[eleve].trim()){
-    carnetEntries.push({ classe: null, apsa: "Ancienne saisie (cycle non précisé)", texte: carnetData[eleve] });
-  }
-
   let txtAssiduite = `${eleve} a été présent(e) à ${present} séance(s) sur ${total} (${pct(present,total)}%), absent(e) à ${absent} séance(s)`+
     (dispense ? `, et dispensé(e) présent(e) à ${dispense} séance(s)` : "") + ".";
 
@@ -1056,13 +1007,6 @@ function renderBilanIndividuel(){
     ? `${oublisCount} oubli(s) de tenue ${oublisCount > 1 ? "ont" : "a"} été relevé(s) pour cet élève sur la période (sur ${total} séance(s)).`
     : `Aucun oubli de tenue n'a été relevé pour cet élève sur la période.`;
 
-  let txtCarnet = carnetEntries.length
-    ? carnetEntries.map(c => c.classe
-        ? `<strong>${escapeHtml(c.apsa)}</strong> (${escapeHtml(c.classe)}) : ${escapeHtml(c.texte.trim())}`
-        : `<strong>${escapeHtml(c.apsa)}</strong> : ${escapeHtml(c.texte.trim())}`
-      ).join("<br>")
-    : `Aucune évaluation du carnet d'entraînement n'a été saisie pour cet élève sur cette période.`;
-
   let txtRemarques = remarquesList.length
     ? remarquesList.map(r => `• ${frDate(r.date)} — ${escapeHtml(r.texte)}`).join("<br>")
     : "Aucune remarque libre enregistrée sur la période.";
@@ -1081,8 +1025,6 @@ function renderBilanIndividuel(){
     <p>${txtAttitude}</p>
     <p>${txtImplication}</p>
     <p>${txtOublis}</p>
-    <h3>Carnet d'entraînement</h3>
-    <p>${txtCarnet}</p>
     <h3>Remarques</h3>
     <p>${txtRemarques}</p>
   `;
@@ -1255,8 +1197,8 @@ function renderBilanProjet(){
   const progMotrice = `Le cycle a couvert ${apsaSet.length} APSA (${apsaSet.join(", ")}). La progression motrice est à objectiver séance après séance à partir des critères d'objectif atteint (moyenne actuelle : ${objectifScore.toFixed(1)}/2).`;
 
   const progMethodo = objectifScore >= 1.2
-    ? "La progression méthodologique (analyse de sa pratique, verbalisation, utilisation du carnet d'entraînement) est en bonne voie."
-    : "La progression méthodologique reste à renforcer, notamment l'usage du carnet d'entraînement et la verbalisation des ressentis.";
+    ? "La progression méthodologique (analyse de sa pratique, verbalisation des ressentis) est en bonne voie."
+    : "La progression méthodologique reste à renforcer, notamment la verbalisation des ressentis et l'analyse de sa propre pratique.";
 
   const cohesion = comportementScore >= 1.2
     ? "La cohésion du groupe progresse, favorisée par les situations collectives et les rôles sociaux endossés."
@@ -1341,6 +1283,9 @@ function exportSeancePdf(s){
 
   h2("Contenu réel de la séance");
   p(s.contenu);
+
+  h2("Bilan à chaud / Prévisions pour la séance suivante");
+  p(s.notesSuite);
 
   h2("Critères globaux");
   p(`Engagement global : ${s.engagement}    Comportement global : ${s.comportement}    Objectif atteint : ${s.objectif}`);
