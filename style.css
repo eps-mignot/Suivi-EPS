@@ -150,7 +150,22 @@ textarea{ resize: vertical; line-height:1.45; }
   border: 1px solid var(--line);
 }
 .card__title{ font-size: 1.05rem; font-weight:800; }
+.card__title--spaced{ margin-top: 18px; }
 .card__count{ font-weight:600; color: var(--text-soft); font-size:.85rem; }
+
+/* ---------------------------------------------------------------- Rappel séance précédente */
+.rappel-box{
+  background: var(--dispense-bg);
+  border: 1px solid var(--dispense);
+  border-radius: var(--radius-l);
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+.rappel-box__label{
+  font-size:.78rem; font-weight:800; color: var(--dispense);
+  text-transform:uppercase; letter-spacing:.03em; margin-bottom:6px;
+}
+.rappel-box__text{ color: var(--text); line-height:1.5; white-space:pre-wrap; }
 
 /* ---------------------------------------------------------------- Boutons */
 .btn{
